@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kwoczflix - Nasze Filmy</title>
+    <style>
+        body {
+            background-color: #141414;
+            color: #fff;
+            font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+            margin: 0;
+            padding: 40px;
+        }
+
+        /* Kontener na logo w stylu Netflixa */
+        .brand-logo {
+            max-width: 450px;
+            margin-bottom: 40px;
+        }
+
+        .netflix-base { font-family: 'Arial Black', 'Impact', sans-serif; font-size: 110px; font-weight: 900; fill: #E50914; }
+        .logo-group { filter: drop-shadow(-4px 4px 6px rgba(0,0,0,0.9)) drop-shadow(4px 4px 3px rgba(0,0,0,0.7)); }
+
+        /* Siatka z kafelkami filmów */
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+            gap: 25px;
+            margin-top: 20px;
+        }
+
+        .box {
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+            background: #222;
+            border-radius: 6px;
+            overflow: hidden;
+            box-shadow: 0px 4px 10px rgba(0,0,0,0.5);
+            position: relative;
+        }
+
+        .box:hover {
+            transform: scale(1.05);
+            box-shadow: 0px 0px 15px rgba(229, 9, 20, 0.4);
+        }
+
+        .box img {
+            width: 100%;
+            height: 320px;
+            object-fit: cover;
+            display: block;
+            transition: filter 0.8s ease; /* Płynne odblurowanie */
+        }
+
+        /* Klasa zamazująca okładkę */
+        .blurred-img {
+            filter: blur(10px) brightness(0.7);
+        }
+
+        .title {
+            padding: 12px;
+            font-weight: bold;
+            font-size: 15px;
+            text-align: center;
+            background-color: #1c1c1c;
+        }
+
+        /* Odtwarzacz Pełnoekranowy */
+        .player-wrapper {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: #000;
+            z-index: 9999;
+        }
+
+        iframe {
+            width: 100%;
+            height: 100%;
+            border: none;
+            background: #000;
+        }
+
+        /* Przycisk zamykania (Biały krzyżyk z obrysem) */
+        .close-btn {
+            position: absolute;
+            top: 25px;
+            right: 30px;
+            background: rgba(0, 0, 0, 0.3);
+            color: #ffffff;
+            border: none;
+            font-size: 35px;
+            line-height: 1;
+            font-weight: bold;
+            cursor: pointer;
+            z-index: 10000;
+            padding: 5px 12px;
+            border-radius: 50%;
+            transition: transform 0.2s, color 0.2s;
+            text-shadow: -2px -2px 0 #000, 2px -2px 0 #000, -2px 2px 0 #000, 2px 2px 0 #000, 0px 4px 10px rgba(0,0,0,0.8);
+        }
+
+        .close-btn:hover {
+            color: #E50914;
+            transform: scale(1.1);
+        }
+    </style>
+</head>
+<body>
+
+    <!-- LOGO KWOCZFLIX -->
+    <div class="brand-logo">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 950 220" width="100%">
+            <g class="logo-group" transform="translate(10, 150)">
+                <path d="M 10,-105 L 42,-105 L 42,5 L 10,5 Z" fill="#B81D24" />
+                <path d="M 40,-55 L 85,-105 L 125,-105 L 68,-45 Z" fill="#E50914" />
+                <path d="M 52,-55 L 122,5 L 82,5 L 32,-40 Z" fill="#E50914" />
+                <text x="130" y="0" class="netflix-base">WOCZFLIX</text>
+            </g>
+        </svg>
+    </div>
+
+    <!-- BIBLIOTEKA FILMÓW -->
+    <div class="grid">
+        
+        <!-- FILM 1 (ZABLOKOWANY HASŁEM + ZAMAZANA OKŁADKA) -->
+        <div class="box" onclick="playWithPassword('ID_FILMU_1', this)">
+            <img src="Bex3.jpeg" alt="Okładka Część 1" class="blurred-img" id="img-locked">
+            <div class="title" id="title-locked">🔒 bex-3 pogoń za złoczyńcą </div>
+        </div>
+
+        <!-- FILM 2 (NORMALNY) -->
+        <div class="box" onclick="play('ID_FILMU_2')">
+            <img src="okladka2.jpg" alt="Okładka Część 2">
+            <div class="title">Szajsowizja 1 odsłona</div>
+        </div>
+
+        <!-- FILM 3 (NORMALNY) -->
+        <div class="box" onclick="play('ID_FILMU_3')">
+            <img src="okladka3.jpg" alt="Okładka Część 3">
+            <div class="title">Szajsowizja 2 odsłona</div>
+        </div>
+
+    </div>
+
+    <!-- ODTWARZACZ WIDEO -->
+    <div class="player-wrapper" id="player">
+        <button class="close-btn" onclick="closeVideo()">✕</button>
+        <iframe id="video" src="" allow="autoplay" allowfullscreen></iframe>
+    </div>
+
+    <script>
+        var player = document.getElementById('player');
+        var video = document.getElementById('video');
+        var isUnlocked = false; // Zapamiętuje, czy film został odblokowany
+
+        // Funkcja z weryfikacją hasła i odblurowaniem okładki
+        function playWithPassword(id, element) {
+            // Jeśli film jest już odblokowany, odpalamy go bez pytania o hasło
+            if (isUnlocked) {
+                play(id);
+                return;
+            }
+
+            var pass = prompt("Ten film jest zabezpieczony! Podaj hasło:");
+            
+            if (pass === "VovaFilm323") {
+                isUnlocked = true;
+                
+                // Odblurowanie okładki
+                var img = document.getElementById('img-locked');
+                var title = document.getElementById('title-locked');
+                
+                img.classList.remove('blurred-img');
+                title.innerText = "Nasz Film: Część 1"; // Usunięcie kłódki
+                
+                // Małe opóźnienie, by użytkownik zobaczył efekt odblurowania przed pełnym ekranem
+                setTimeout(function() {
+                    play(id);
+                }, 600);
+
+            } else if (pass !== null) {
+                alert("Błędne hasło! Nie masz dostępu do tego filmu.");
+            }
+        }
+
+        // Standardowa funkcja odtwarzania filmu na pełnym ekranie
+        function play(id) {
+            video.src = "https://drive.google.com/file/d/" + id + "/preview";
+            player.style.display = "block";
+            
+            if (player.requestFullscreen) {
+                player.requestFullscreen();
+            } else if (player.webkitRequestFullscreen) {
+                player.webkitRequestFullscreen();
+            } else if (player.msRequestFullscreen) {
+                player.msRequestFullscreen();
+            }
+
+            document.addEventListener('fullscreenchange', exitHandler);
+            document.addEventListener('webkitfullscreenchange', exitHandler);
+        }
+
+        function closeVideo() {
+            if (document.fullscreenElement || document.webkitFullscreenElement) {
+                if (document.exitFullscreen) {
+                    document.exitFullscreen();
+                } else if (document.webkitExitFullscreen) {
+                    document.webkitExitFullscreen();
+                }
+            }
+            player.style.display = "none";
+            video.src = "";
+        }
+
+        function exitHandler() {
+            if (!document.fullscreenElement && !document.webkitIsFullScreen) {
+                player.style.display = "none";
+                video.src = "";
+            }
+        }
+    </script>
+
+</body>
+</html>
