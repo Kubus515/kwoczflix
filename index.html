@@ -4,6 +4,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Kwoczflix - Nasze Filmy</title>
+
+    <!-- Biblioteka do szyfrowania AES -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
+
     <style>
         body {
             background-color: #141414;
@@ -13,7 +17,6 @@
             padding: 40px;
         }
 
-        /* Kontener na logo w stylu Netflixa */
         .brand-logo {
             max-width: 450px;
             margin-bottom: 40px;
@@ -22,7 +25,6 @@
         .netflix-base { font-family: 'Arial Black', 'Impact', sans-serif; font-size: 110px; font-weight: 900; fill: #E50914; }
         .logo-group { filter: drop-shadow(-4px 4px 6px rgba(0,0,0,0.9)) drop-shadow(4px 4px 3px rgba(0,0,0,0.7)); }
 
-        /* Siatka z kafelkami filmów */
         .grid {
             display: grid;
             grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
@@ -50,10 +52,9 @@
             height: 320px;
             object-fit: cover;
             display: block;
-            transition: filter 0.8s ease; /* Płynne odblurowanie */
+            transition: filter 0.8s ease;
         }
 
-        /* Klasa zamazująca okładkę */
         .blurred-img {
             filter: blur(10px) brightness(0.7);
         }
@@ -66,7 +67,24 @@
             background-color: #1c1c1c;
         }
 
-        /* Odtwarzacz Pełnoekranowy */
+        /* Plakietka z datą premiery na środku okładki */
+        .premiere-badge {
+            position: absolute;
+            top: 42%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(229, 9, 20, 0.9);
+            color: #fff;
+            padding: 8px 14px;
+            border-radius: 4px;
+            font-weight: bold;
+            font-size: 13px;
+            text-align: center;
+            pointer-events: none;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.8);
+            white-space: nowrap;
+        }
+
         .player-wrapper {
             display: none;
             position: fixed;
@@ -85,7 +103,6 @@
             background: #000;
         }
 
-        /* Przycisk zamykania (Biały krzyżyk z obrysem) */
         .close-btn {
             position: absolute;
             top: 25px;
@@ -127,22 +144,23 @@
     <!-- BIBLIOTEKA FILMÓW -->
     <div class="grid">
         
-        <!-- FILM 1 (ZABLOKOWANY HASŁEM + ZAMAZANA OKŁADKA) -->
-        <div class="box" onclick="playWithPassword('1D5ncXalhkD7iIO8WH_kNj9idliZtJszK')">
-            <img src="Bex3.jpeg" alt="Okładka Część 1" class="blurred-img" id="img-locked">
-            <div class="title" id="title-locked">🔒 bex-3 pogoń za złoczyńcą </div>
+        <!-- FILM 1 (ZASZYFROWANY HASŁEM + ZAMAZANY) -->
+        <div class="box" onclick="playEncrypted('TUTAJ_ZASZYFROWANY_CIĄG')">
+            <img src="okladka_szajsowizja.jpeg" alt="Szajsowizja I Odsłona" class="blurred-img" id="img-locked">
+            <div class="title" id="title-locked">🔒 Szajsowizja: I Odsłona</div>
         </div>
 
         <!-- FILM 2 (NORMALNY) -->
         <div class="box" onclick="play('1iq7xbdT2RUEjKb8KOtHKV5wenG-_22Rf')">
-            <img src="szajsowizja1.jpeg" alt="Okładka Część 2">
-            <div class="title">Szajsowizja 1 odsłona</div>
+            <img src="okladka_szajsowizja_2.jpeg" alt="Szajsowizja II Odsłona">
+            <div class="title">Szajsowizja: II Odsłona</div>
         </div>
 
-        <!-- FILM 3 (NORMALNY) -->
-        <div class="box" onclick="play('1KciebpVB6sq544UNXAGUqJhTwEgypSAw')">
-            <img src="szjsowizja2.jpeg" alt="Okładka Część 3">
-            <div class="title">Szajsowizja 2 odsłona</div>
+        <!-- NOWY FILM: 1 Z 4 (PREMIERA 19 LISTOPADA 2026) -->
+        <div class="box" onclick="playScheduled('ID_FILMU_1_Z_4', '2026-11-19T00:00:00', this)">
+            <img src="okladka_1z4.jpeg" alt="1 z 4" class="blurred-img">
+            <div class="premiere-badge">Premiera: 19 listopada</div>
+            <div class="title">⏳ 1 z 4</div>
         </div>
 
     </div>
@@ -156,39 +174,76 @@
     <script>
         var player = document.getElementById('player');
         var video = document.getElementById('video');
-        var isUnlocked = false; // Zapamiętuje, czy film został odblokowany
+        var unlockedId = null;
 
-        // Funkcja z weryfikacją hasła i odblurowaniem okładki
-        function playWithPassword(id, element) {
-            // Jeśli film jest już odblokowany, odpalamy go bez pytania o hasło
-            if (isUnlocked) {
+        // Automatyczne odblurowanie na starcie strony, jeśli 19 listopada już minął
+        window.addEventListener('DOMContentLoaded', function() {
+            var releaseDate = new Date('2026-11-19T00:00:00');
+            if (new Date() >= releaseDate) {
+                var scheduledBoxes = document.querySelectorAll('.premiere-badge');
+                scheduledBoxes.forEach(function(badge) {
+                    var box = badge.parentElement;
+                    box.querySelector('img').classList.remove('blurred-img');
+                    box.querySelector('.title').innerText = "1 z 4";
+                    badge.style.display = 'none';
+                });
+            }
+        });
+
+        // Funkcja otwierająca film dopiero po wyznaczonej dacie
+        function playScheduled(id, releaseDateStr, element) {
+            var now = new Date();
+            var releaseDate = new Date(releaseDateStr);
+
+            if (now >= releaseDate) {
+                // Odblokowanie wizualne (na wypadek otwarcia strony przed północą i kliknięcia po północy)
+                var img = element.querySelector('img');
+                var badge = element.querySelector('.premiere-badge');
+                var title = element.querySelector('.title');
+
+                if (img) img.classList.remove('blurred-img');
+                if (badge) badge.style.display = 'none';
+                if (title) title.innerText = "1 z 4";
+
                 play(id);
+            } else {
+                alert("Premiera filmu „1 z 4” odbędzie się 19 listopada 2026 roku! Wróć w czwartek.");
+            }
+        }
+
+        // Funkcja z hasłem i szyfrowaniem
+        function playEncrypted(encryptedData) {
+            if (unlockedId) {
+                play(unlockedId);
                 return;
             }
 
             var pass = prompt("Ten film jest zabezpieczony! Podaj hasło:");
-            
-            if (pass === "VovaFilm323") {
-                isUnlocked = true;
-                
-                // Odblurowanie okładki
-                var img = document.getElementById('img-locked');
-                var title = document.getElementById('title-locked');
-                
-                img.classList.remove('blurred-img');
-                title.innerText = "Nasz Film: Część 1"; // Usunięcie kłódki
-                
-                // Małe opóźnienie, by użytkownik zobaczył efekt odblurowania przed pełnym ekranem
-                setTimeout(function() {
-                    play(id);
-                }, 600);
+            if (!pass) return;
 
-            } else if (pass !== null) {
-                alert("Błędne hasło! Nie masz dostępu do tego filmu.");
+            try {
+                var bytes = CryptoJS.AES.decrypt(encryptedData, pass);
+                var decryptedId = bytes.toString(CryptoJS.enc.Utf8);
+
+                if (decryptedId && decryptedId.length > 5) {
+                    unlockedId = decryptedId;
+
+                    var img = document.getElementById('img-locked');
+                    var title = document.getElementById('title-locked');
+                    img.classList.remove('blurred-img');
+                    title.innerText = "Szajsowizja: I Odsłona";
+
+                    setTimeout(function() {
+                        play(unlockedId);
+                    }, 600);
+                } else {
+                    alert("Błędne hasło! Nie udało się odblokować filmu.");
+                }
+            } catch (e) {
+                alert("Błędne hasło! Nie udało się odblokować filmu.");
             }
         }
 
-        // Standardowa funkcja odtwarzania filmu na pełnym ekranie
         function play(id) {
             video.src = "https://drive.google.com/file/d/" + id + "/preview";
             player.style.display = "block";
